@@ -1,5 +1,6 @@
 import os
 import subprocess
+import re
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 
@@ -25,6 +26,14 @@ async def help_command(update: Update, context: CallbackContext) -> None:
 async def record_m3u8(update: Update, context: CallbackContext) -> None:
     m3u8_url = update.message.text
 
+    # Extract duration from the message text if provided
+    duration = '00:10:00'  # Default duration
+    if context.args:
+        duration = context.args[0]
+        if not re.match(r'\d{2}:\d{2}:\d{2}', duration):
+            await update.message.reply_text('Please provide a valid duration in the format HH:MM:SS.')
+            return
+    
     if not m3u8_url.startswith('http://') and not m3u8_url.startswith('https://'):
         await update.message.reply_text('Please send a valid M3U8 URL.')
         return
@@ -38,11 +47,11 @@ async def record_m3u8(update: Update, context: CallbackContext) -> None:
         '-i', m3u8_url,
         '-c', 'copy',
         '-f', 'mp4',
-        '-t', '00:10:00',  # Record for 10 minutes, adjust as needed
+        '-t', duration,  # Use the provided duration
         file_path
     ]
 
-    await update.message.reply_text('Recording started, this may take a while depending on the stream length.')
+    await update.message.reply_text(f'Recording started for {duration}. This may take a while depending on the stream length.')
 
     try:
         subprocess.run(command, check=True)
@@ -62,10 +71,12 @@ async def record_m3u8(update: Update, context: CallbackContext) -> None:
 async def main() -> None:
     application = Application.builder().token(TOKEN).build()
 
+    # Register handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, record_m3u8))
 
+    # Run the bot
     await application.run_polling()
 
 if __name__ == '__main__':
