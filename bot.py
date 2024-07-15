@@ -98,7 +98,7 @@ def mux_file(filename, update: Update):
 
 def upload_file(mp4_filename, update: Update):
     with open(mp4_filename, 'rb') as file:
-        update.message.reply_document(document=file, filename=mp4_filename)
+        update.message.reply_document(document=InputFile(file, filename=mp4_filename))
     os.remove(mp4_filename)  # Clean up
     update.message.reply_text("File uploaded successfully!")
     global current_m3u8_link, recording_start_time
