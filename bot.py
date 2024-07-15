@@ -3,7 +3,7 @@ import logging
 import subprocess
 from datetime import datetime
 from telegram import Update, InputFile
-from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -19,10 +19,10 @@ download_process = None
 mux_process = None
 
 # Define the bot commands
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Welcome! Use /help to see available commands.")
+async def start(update: Update, context: CallbackContext):
+    await update.message.reply_text("Welcome! Use /help to see available commands.")
 
-def help_command(update: Update, context: CallbackContext):
+async def help_command(update: Update, context: CallbackContext):
     help_text = (
         "/start - Start the bot\n"
         "/help - Show this help message\n"
@@ -31,17 +31,17 @@ def help_command(update: Update, context: CallbackContext):
         "/cancel - Cancel the current operation\n"
         "/timing - Show the start time of the recording\n"
     )
-    update.message.reply_text(help_text)
+    await update.message.reply_text(help_text)
 
-def record(update: Update, context: CallbackContext):
+async def record(update: Update, context: CallbackContext):
     global current_m3u8_link, recording_start_time, download_process, mux_process
     
     if download_process or mux_process:
-        update.message.reply_text("Another recording or muxing process is already running. Please wait or cancel the current operation.")
+        await update.message.reply_text("Another recording or muxing process is already running. Please wait or cancel the current operation.")
         return
     
     if not context.args:
-        update.message.reply_text("Please provide an M3U8 link.")
+        await update.message.reply_text("Please provide an M3U8 link.")
         return
     
     m3u8_link = context.args[0]
@@ -49,7 +49,7 @@ def record(update: Update, context: CallbackContext):
     recording_start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     filename = "output.ts"
-    update.message.reply_text(f"Recording started for {m3u8_link}. Please wait...")
+    await update.message.reply_text(f"Recording started for {m3u8_link}. Please wait...")
 
     # Start recording
     download_process = subprocess.Popen(['ffmpeg', '-i', m3u8_link, '-c', 'copy', filename], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -62,17 +62,17 @@ def record(update: Update, context: CallbackContext):
             time_info = line.split('time=')[-1].split(' ')[0]
             time_parts = time_info.split(':')
             elapsed_time = int(time_parts[0]) * 3600 + int(time_parts[1]) * 60 + float(time_parts[2])
-            update.message.reply_text(f"Download progress: {elapsed_time:.2f}s")
+            await update.message.reply_text(f"Download progress: {elapsed_time:.2f}s")
 
     download_process.wait()
     if download_process.returncode == 0:
-        update.message.reply_text("Recording complete! Muxing the file...")
+        await update.message.reply_text("Recording complete! Muxing the file...")
         mux_file(filename, update)
     else:
-        update.message.reply_text("Recording failed.")
+        await update.message.reply_text("Recording failed.")
         download_process = None
 
-def mux_file(filename, update: Update):
+async def mux_file(filename, update: Update):
     global mux_process
     
     mp4_filename = filename.replace('.ts', '.mp4')
@@ -86,75 +86,71 @@ def mux_file(filename, update: Update):
             time_info = line.split('time=')[-1].split(' ')[0]
             time_parts = time_info.split(':')
             elapsed_time = int(time_parts[0]) * 3600 + int(time_parts[1]) * 60 + float(time_parts[2])
-            update.message.reply_text(f"Muxing progress: {elapsed_time:.2f}s")
+            await update.message.reply_text(f"Muxing progress: {elapsed_time:.2f}s")
 
     mux_process.wait()
     if mux_process.returncode == 0:
-        update.message.reply_text("Muxing complete! Uploading the file...")
+        await update.message.reply_text("Muxing complete! Uploading the file...")
         upload_file(mp4_filename, update)
     else:
-        update.message.reply_text("Muxing failed.")
+        await update.message.reply_text("Muxing failed.")
         mux_process = None
 
-def upload_file(mp4_filename, update: Update):
+async def upload_file(mp4_filename, update: Update):
     with open(mp4_filename, 'rb') as file:
-        update.message.reply_document(document=InputFile(file, filename=mp4_filename))
+        await update.message.reply_document(document=InputFile(file, filename=mp4_filename))
     os.remove(mp4_filename)  # Clean up
-    update.message.reply_text("File uploaded successfully!")
+    await update.message.reply_text("File uploaded successfully!")
     global current_m3u8_link, recording_start_time
     current_m3u8_link = None
     recording_start_time = None
 
-def cancel(update: Update, context: CallbackContext):
+async def cancel(update: Update, context: CallbackContext):
     global download_process, mux_process
 
     if download_process:
         download_process.terminate()
         download_process = None
-        update.message.reply_text("Download process has been cancelled.")
+        await update.message.reply_text("Download process has been cancelled.")
     elif mux_process:
         mux_process.terminate()
         mux_process = None
-        update.message.reply_text("Muxing process has been cancelled.")
+        await update.message.reply_text("Muxing process has been cancelled.")
     else:
-        update.message.reply_text("No ongoing process to cancel.")
+        await update.message.reply_text("No ongoing process to cancel.")
 
-def status(update: Update, context: CallbackContext):
+async def status(update: Update, context: CallbackContext):
     if current_m3u8_link:
         elapsed_time = datetime.now() - datetime.strptime(recording_start_time, '%Y-%m-%d %H:%M:%S')
-        update.message.reply_text(f"Current M3U8 Link: {current_m3u8_link}\n"
+        await update.message.reply_text(f"Current M3U8 Link: {current_m3u8_link}\n"
                                  f"Recording Start Time: {recording_start_time}\n"
                                  f"Elapsed Time: {elapsed_time}\n"
                                  f"Processes - Download: {'Running' if download_process else 'Not Running'}, "
                                  f"Muxing: {'Running' if mux_process else 'Not Running'}")
     else:
-        update.message.reply_text("No ongoing recording process.")
+        await update.message.reply_text("No ongoing recording process.")
 
-def timing(update: Update, context: CallbackContext):
+async def timing(update: Update, context: CallbackContext):
     if recording_start_time:
-        update.message.reply_text(f"Recording started at: {recording_start_time}")
+        await update.message.reply_text(f"Recording started at: {recording_start_time}")
     else:
-        update.message.reply_text("No ongoing recording process.")
+        await update.message.reply_text("No ongoing recording process.")
 
 def main():
-    # Create Updater object with bot token
-    updater = Updater(token=TOKEN, use_context=True)
-
-    # Get the dispatcher to register handlers
-    dp = updater.dispatcher
+    # Create Application object with bot token
+    application = Application.builder().token(TOKEN).build()
 
     # Register handlers
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("help", help_command))
-    dp.add_handler(CommandHandler("record", record))
-    dp.add_handler(CommandHandler("cancel", cancel))
-    dp.add_handler(CommandHandler("status", status))
-    dp.add_handler(CommandHandler("timing", timing))
-    dp.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, record))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("record", record))
+    application.add_handler(CommandHandler("cancel", cancel))
+    application.add_handler(CommandHandler("status", status))
+    application.add_handler(CommandHandler("timing", timing))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, record))
 
     # Start the Bot
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
