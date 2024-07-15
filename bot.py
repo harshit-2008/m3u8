@@ -2,8 +2,8 @@ import os
 import logging
 import subprocess
 from datetime import datetime
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters
+from telegram import Update, InputFile
+from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, filters
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -150,7 +150,7 @@ def main():
     dp.add_handler(CommandHandler("cancel", cancel))
     dp.add_handler(CommandHandler("status", status))
     dp.add_handler(CommandHandler("timing", timing))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, record))
+    dp.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, record))
 
     # Start the Bot
     updater.start_polling()
