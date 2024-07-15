@@ -4,7 +4,7 @@ from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 
 # Define your bot token here
-TOKEN = 'YOUR_TELEGRAM_BOT_API_TOKEN'
+TOKEN = '7439562089:AAHO4EVt3g_R9-9gjqX3J7_lLTusprisdgE'
 
 # Directory where recordings will be saved
 DOWNLOAD_DIR = 'downloads'
