@@ -2,11 +2,12 @@ import logging
 import asyncio
 import ffmpeg
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
+from telegram.helpers import escape_markdown
 
 # Bot Token and Admin ID
 TOKEN = '7439562089:AAERgxvEYiLJF_juL68k1nn78negwJ3mNiM'
