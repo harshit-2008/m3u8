@@ -10,7 +10,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Define bot token (replace 'YOUR_NEW_BOT_TOKEN' with your actual bot token)
-TOKEN = '7439562089:AAERgxvEYiLJF_juL68k1nn78negwJ3mNiM'
+TOKEN = 'YOUR_NEW_BOT_TOKEN'
 
 # Global variables
 current_m3u8_link = None
@@ -26,7 +26,7 @@ async def help_command(update: Update, context: CallbackContext):
     help_text = (
         "/start - Start the bot\n"
         "/help - Show this help message\n"
-        "/record <M3U8 link> - Start recording the M3U8 stream\n"
+        "/record <M3U8 link> [<duration>] - Start recording the M3U8 stream for a specified duration (default 10s)\n"
         "/status - Show the current status of the bot\n"
         "/cancel - Cancel the current operation\n"
         "/timing - Show the start time of the recording\n"
@@ -45,18 +45,25 @@ async def record(update: Update, context: CallbackContext):
         return
     
     m3u8_link = context.args[0]
+    duration = int(context.args[1]) if len(context.args) > 1 else 10  # Default to 10 seconds if not specified
     current_m3u8_link = m3u8_link
     recording_start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     filename = "output.ts"
-    await update.message.reply_text(f"Recording started for {m3u8_link}. Please wait...")
+    await update.message.reply_text(f"Recording started for {m3u8_link} for {duration} seconds. Please wait...")
 
     try:
         # Start recording
-        download_process = subprocess.Popen(['ffmpeg', '-i', m3u8_link, '-c', 'copy', filename], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        download_process = subprocess.Popen(
+            ['ffmpeg', '-i', m3u8_link, '-t', str(duration), '-c', 'copy', filename], 
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
 
         # Monitor progress
-        for line in iter(download_process.stderr.readline, b''):
+        while True:
+            line = download_process.stderr.readline()
+            if not line:
+                break
             line = line.decode('utf-8')
             if 'time=' in line:
                 # Extract the time part of the progress log
@@ -77,16 +84,25 @@ async def record(update: Update, context: CallbackContext):
     except Exception as e:
         logger.error(f"An error occurred during the recording process: {e}")
         await update.message.reply_text("An error occurred during the recording process.")
+        # Clean up
+        if os.path.exists(filename):
+            os.remove(filename)
 
 async def mux_file(filename, update: Update):
     global mux_process
     
     mp4_filename = filename.replace('.ts', '.mp4')
     try:
-        mux_process = subprocess.Popen(['ffmpeg', '-i', filename, '-c', 'copy', mp4_filename], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        mux_process = subprocess.Popen(
+            ['ffmpeg', '-i', filename, '-c', 'copy', mp4_filename], 
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
 
         # Monitor progress
-        for line in iter(mux_process.stderr.readline, b''):
+        while True:
+            line = mux_process.stderr.readline()
+            if not line:
+                break
             line = line.decode('utf-8')
             if 'time=' in line:
                 # Extract the time part of the progress log
@@ -107,6 +123,11 @@ async def mux_file(filename, update: Update):
     except Exception as e:
         logger.error(f"An error occurred during the muxing process: {e}")
         await update.message.reply_text("An error occurred during the muxing process.")
+        # Clean up
+        if os.path.exists(filename):
+            os.remove(filename)
+        if os.path.exists(mp4_filename):
+            os.remove(mp4_filename)
 
 async def upload_file(mp4_filename, update: Update):
     try:
@@ -128,10 +149,12 @@ async def cancel(update: Update, context: CallbackContext):
     try:
         if download_process:
             download_process.terminate()
+            download_process.wait()
             download_process = None
             await update.message.reply_text("Download process has been cancelled.")
         elif mux_process:
             mux_process.terminate()
+            mux_process.wait()
             mux_process = None
             await update.message.reply_text("Muxing process has been cancelled.")
         else:
