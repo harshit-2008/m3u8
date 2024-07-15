@@ -1,3 +1,4 @@
+TOKEN = '7439562089:AAERgxvEYiLJF_juL68k1nn78negwJ3mNiM'
 import os
 import logging
 import subprocess
@@ -207,4 +208,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
