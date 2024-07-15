@@ -9,8 +9,8 @@ from telegram.ext import Application, CommandHandler, CallbackContext, MessageHa
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Define bot token (replace 'YOUR_BOT_TOKEN' with your actual bot token)
-TOKEN = 'Y7439562089:AAERgxvEYiLJF_juL68k1nn78negwJ3mNiM'
+# Define bot token (replace 'YOUR_NEW_BOT_TOKEN' with your actual bot token)
+TOKEN = 'YOUR_NEW_BOT_TOKEN'
 
 # Global variables
 current_m3u8_link = None
@@ -137,20 +137,24 @@ async def timing(update: Update, context: CallbackContext):
         await update.message.reply_text("No ongoing recording process.")
 
 def main():
-    # Create Application object with bot token
-    application = Application.builder().token(TOKEN).build()
+    try:
+        # Create Application object with bot token
+        application = Application.builder().token(TOKEN).build()
 
-    # Register handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("record", record))
-    application.add_handler(CommandHandler("cancel", cancel))
-    application.add_handler(CommandHandler("status", status))
-    application.add_handler(CommandHandler("timing", timing))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, record))
+        # Register handlers
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("record", record))
+        application.add_handler(CommandHandler("cancel", cancel))
+        application.add_handler(CommandHandler("status", status))
+        application.add_handler(CommandHandler("timing", timing))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, record))
 
-    # Start the Bot
-    application.run_polling()
+        # Start the Bot
+        application.run_polling()
+
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
 
 if __name__ == '__main__':
     main()
