@@ -51,73 +51,94 @@ async def record(update: Update, context: CallbackContext):
     filename = "output.ts"
     await update.message.reply_text(f"Recording started for {m3u8_link}. Please wait...")
 
-    # Start recording
-    download_process = subprocess.Popen(['ffmpeg', '-i', m3u8_link, '-c', 'copy', filename], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        # Start recording
+        download_process = subprocess.Popen(['ffmpeg', '-i', m3u8_link, '-c', 'copy', filename], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    # Monitor progress
-    for line in iter(download_process.stderr.readline, b''):
-        line = line.decode('utf-8')
-        if 'time=' in line:
-            # Extract the time part of the progress log
-            time_info = line.split('time=')[-1].split(' ')[0]
-            time_parts = time_info.split(':')
-            elapsed_time = int(time_parts[0]) * 3600 + int(time_parts[1]) * 60 + float(time_parts[2])
-            await update.message.reply_text(f"Download progress: {elapsed_time:.2f}s")
+        # Monitor progress
+        for line in iter(download_process.stderr.readline, b''):
+            line = line.decode('utf-8')
+            if 'time=' in line:
+                # Extract the time part of the progress log
+                time_info = line.split('time=')[-1].split(' ')[0]
+                time_parts = time_info.split(':')
+                elapsed_time = int(time_parts[0]) * 3600 + int(time_parts[1]) * 60 + float(time_parts[2])
+                await update.message.reply_text(f"Download progress: {elapsed_time:.2f}s")
 
-    download_process.wait()
-    if download_process.returncode == 0:
-        await update.message.reply_text("Recording complete! Muxing the file...")
-        mux_file(filename, update)
-    else:
-        await update.message.reply_text("Recording failed.")
-        download_process = None
+        download_process.wait()
+        if download_process.returncode == 0:
+            await update.message.reply_text("Recording complete! Muxing the file...")
+            mux_file(filename, update)
+        else:
+            await update.message.reply_text("Recording failed.")
+            logger.error("Recording process failed.")
+            download_process = None
+
+    except Exception as e:
+        logger.error(f"An error occurred during the recording process: {e}")
+        await update.message.reply_text("An error occurred during the recording process.")
 
 async def mux_file(filename, update: Update):
     global mux_process
     
     mp4_filename = filename.replace('.ts', '.mp4')
-    mux_process = subprocess.Popen(['ffmpeg', '-i', filename, '-c', 'copy', mp4_filename], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        mux_process = subprocess.Popen(['ffmpeg', '-i', filename, '-c', 'copy', mp4_filename], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    # Monitor progress
-    for line in iter(mux_process.stderr.readline, b''):
-        line = line.decode('utf-8')
-        if 'time=' in line:
-            # Extract the time part of the progress log
-            time_info = line.split('time=')[-1].split(' ')[0]
-            time_parts = time_info.split(':')
-            elapsed_time = int(time_parts[0]) * 3600 + int(time_parts[1]) * 60 + float(time_parts[2])
-            await update.message.reply_text(f"Muxing progress: {elapsed_time:.2f}s")
+        # Monitor progress
+        for line in iter(mux_process.stderr.readline, b''):
+            line = line.decode('utf-8')
+            if 'time=' in line:
+                # Extract the time part of the progress log
+                time_info = line.split('time=')[-1].split(' ')[0]
+                time_parts = time_info.split(':')
+                elapsed_time = int(time_parts[0]) * 3600 + int(time_parts[1]) * 60 + float(time_parts[2])
+                await update.message.reply_text(f"Muxing progress: {elapsed_time:.2f}s")
 
-    mux_process.wait()
-    if mux_process.returncode == 0:
-        await update.message.reply_text("Muxing complete! Uploading the file...")
-        upload_file(mp4_filename, update)
-    else:
-        await update.message.reply_text("Muxing failed.")
-        mux_process = None
+        mux_process.wait()
+        if mux_process.returncode == 0:
+            await update.message.reply_text("Muxing complete! Uploading the file...")
+            upload_file(mp4_filename, update)
+        else:
+            await update.message.reply_text("Muxing failed.")
+            logger.error("Muxing process failed.")
+            mux_process = None
+
+    except Exception as e:
+        logger.error(f"An error occurred during the muxing process: {e}")
+        await update.message.reply_text("An error occurred during the muxing process.")
 
 async def upload_file(mp4_filename, update: Update):
-    with open(mp4_filename, 'rb') as file:
-        await update.message.reply_document(document=InputFile(file, filename=mp4_filename))
-    os.remove(mp4_filename)  # Clean up
-    await update.message.reply_text("File uploaded successfully!")
-    global current_m3u8_link, recording_start_time
-    current_m3u8_link = None
-    recording_start_time = None
+    try:
+        with open(mp4_filename, 'rb') as file:
+            await update.message.reply_document(document=InputFile(file, filename=mp4_filename))
+        os.remove(mp4_filename)  # Clean up
+        await update.message.reply_text("File uploaded successfully!")
+        global current_m3u8_link, recording_start_time
+        current_m3u8_link = None
+        recording_start_time = None
+
+    except Exception as e:
+        logger.error(f"An error occurred while uploading the file: {e}")
+        await update.message.reply_text("An error occurred while uploading the file.")
 
 async def cancel(update: Update, context: CallbackContext):
     global download_process, mux_process
 
-    if download_process:
-        download_process.terminate()
-        download_process = None
-        await update.message.reply_text("Download process has been cancelled.")
-    elif mux_process:
-        mux_process.terminate()
-        mux_process = None
-        await update.message.reply_text("Muxing process has been cancelled.")
-    else:
-        await update.message.reply_text("No ongoing process to cancel.")
+    try:
+        if download_process:
+            download_process.terminate()
+            download_process = None
+            await update.message.reply_text("Download process has been cancelled.")
+        elif mux_process:
+            mux_process.terminate()
+            mux_process = None
+            await update.message.reply_text("Muxing process has been cancelled.")
+        else:
+            await update.message.reply_text("No ongoing process to cancel.")
+    except Exception as e:
+        logger.error(f"An error occurred during the cancel operation: {e}")
+        await update.message.reply_text("An error occurred during the cancel operation.")
 
 async def status(update: Update, context: CallbackContext):
     if current_m3u8_link:
