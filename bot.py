@@ -3,7 +3,6 @@ import logging
 import requests
 import subprocess
 from tqdm import tqdm
-from io import BytesIO
 from datetime import datetime
 from telegram import Update, InputFile
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters
@@ -13,7 +12,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Define bot token (replace 'YOUR_BOT_TOKEN' with your actual bot token)
-TOKEN = 'YOUR_BOT_TOKEN'
+TOKEN = '7439562089:AAERgxvEYiLJF_juL68k1nn78negwJ3mNiM'
 
 # Global variables
 current_m3u8_link = None
