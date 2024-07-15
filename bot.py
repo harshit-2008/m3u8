@@ -62,7 +62,7 @@ async def record(update: Update, context: CallbackContext):
         # Monitor progress
         while True:
             line = download_process.stderr.readline()
-            if not line:
+            if not line and download_process.poll() is not None:
                 break
             line = line.decode('utf-8')
             logger.info(line)  # Log ffmpeg output
@@ -103,7 +103,7 @@ async def mux_file(filename, update: Update):
         # Monitor progress
         while True:
             line = mux_process.stderr.readline()
-            if not line:
+            if not line and mux_process.poll() is not None:
                 break
             line = line.decode('utf-8')
             logger.info(line)  # Log ffmpeg output
