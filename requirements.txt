@@ -5,5 +5,5 @@ pytz==2024.1
 loguru==0.7.0  # Optional for advanced logging
 aiohttp==3.8.4  # Optional for advanced HTTP features
 moviepy==1.0.3  # Optional for additional media processing
-apscheduler==3.10.1
+apscheduler==3.9.1
 ffmpeg-python==0.2.0
