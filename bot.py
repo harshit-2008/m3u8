@@ -10,7 +10,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Define bot token (replace 'YOUR_NEW_BOT_TOKEN' with your actual bot token)
-TOKEN = '7439562089:AAERgxvEYiLJF_juL68k1nn78negwJ3mNiM'
+TOKEN = 'YOUR_NEW_BOT_TOKEN'
 
 # Global variables
 current_m3u8_link = None
