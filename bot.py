@@ -55,7 +55,7 @@ async def record(update: Update, context: CallbackContext):
     try:
         # Start recording
         download_process = subprocess.Popen(
-            ['ffmpeg', '-i', m3u8_link, '-t', str(duration), '-c', 'copy', filename], 
+            ['ffmpeg', '-i', m3u8_link, '-t', str(duration), '-c', 'copy', filename],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
 
@@ -65,6 +65,7 @@ async def record(update: Update, context: CallbackContext):
             if not line:
                 break
             line = line.decode('utf-8')
+            logger.info(line)  # Log ffmpeg output
             if 'time=' in line:
                 # Extract the time part of the progress log
                 time_info = line.split('time=')[-1].split(' ')[0]
@@ -78,7 +79,7 @@ async def record(update: Update, context: CallbackContext):
             mux_file(filename, update)
         else:
             await update.message.reply_text("Recording failed.")
-            logger.error("Recording process failed.")
+            logger.error("Recording process failed with return code: %d", download_process.returncode)
             download_process = None
 
     except Exception as e:
@@ -94,7 +95,7 @@ async def mux_file(filename, update: Update):
     mp4_filename = filename.replace('.ts', '.mp4')
     try:
         mux_process = subprocess.Popen(
-            ['ffmpeg', '-i', filename, '-c', 'copy', mp4_filename], 
+            ['ffmpeg', '-i', filename, '-c', 'copy', mp4_filename],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
 
@@ -104,6 +105,7 @@ async def mux_file(filename, update: Update):
             if not line:
                 break
             line = line.decode('utf-8')
+            logger.info(line)  # Log ffmpeg output
             if 'time=' in line:
                 # Extract the time part of the progress log
                 time_info = line.split('time=')[-1].split(' ')[0]
@@ -117,7 +119,7 @@ async def mux_file(filename, update: Update):
             upload_file(mp4_filename, update)
         else:
             await update.message.reply_text("Muxing failed.")
-            logger.error("Muxing process failed.")
+            logger.error("Muxing process failed with return code: %d", mux_process.returncode)
             mux_process = None
 
     except Exception as e:
@@ -195,6 +197,7 @@ def main():
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, record))
 
         # Start the Bot
+        logger.info("Starting the bot...")
         application.run_polling()
 
     except Exception as e:
@@ -202,3 +205,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
