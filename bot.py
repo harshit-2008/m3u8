@@ -10,7 +10,7 @@ from apscheduler.triggers.date import DateTrigger
 
 # Bot Token and Admin ID
 TOKEN = '7439562089:AAERgxvEYiLJF_juL68k1nn78negwJ3mNiM'
-ADMIN_ID = 6066102279 # Replace with your Telegram user ID
+ADMIN_ID = 6066102279  # Replace with your Telegram user ID
 
 # Configure logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
