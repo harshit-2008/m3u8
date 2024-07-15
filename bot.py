@@ -48,17 +48,17 @@ async def record(update: Update, context: CallbackContext):
     duration = int(context.args[1]) if len(context.args) > 1 else 10  # Default to 10 seconds if not specified
     current_m3u8_link = m3u8_link
     recording_start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
     filename = "output.ts"
+    
     await update.message.reply_text(f"Recording started for {m3u8_link} for {duration} seconds. Please wait...")
-
+    
     try:
         # Start recording
         download_process = subprocess.Popen(
             ['ffmpeg', '-i', m3u8_link, '-t', str(duration), '-c', 'copy', filename],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-
+        
         # Monitor progress
         while True:
             line = download_process.stderr.readline()
@@ -66,6 +66,7 @@ async def record(update: Update, context: CallbackContext):
                 break
             line = line.decode('utf-8')
             logger.info(line)  # Log ffmpeg output
+            
             if 'time=' in line:
                 # Extract the time part of the progress log
                 time_info = line.split('time=')[-1].split(' ')[0]
@@ -98,7 +99,7 @@ async def mux_file(filename, update: Update):
             ['ffmpeg', '-i', filename, '-c', 'copy', mp4_filename],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-
+        
         # Monitor progress
         while True:
             line = mux_process.stderr.readline()
@@ -106,6 +107,7 @@ async def mux_file(filename, update: Update):
                 break
             line = line.decode('utf-8')
             logger.info(line)  # Log ffmpeg output
+            
             if 'time=' in line:
                 # Extract the time part of the progress log
                 time_info = line.split('time=')[-1].split(' ')[0]
@@ -205,4 +207,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
