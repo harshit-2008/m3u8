@@ -1,19 +1,10 @@
-
-
-# Define the bot token (Replace with your actual token)
-TOKEN = ''
-
-# Define the chat ID for file uploads (Replace with your actual chat ID)
-CHAT_ID = ''
-
 import os
 import logging
 import subprocess
-import signal
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackContext, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, CallbackContext
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,17 +15,14 @@ RECORDINGS_DIR = 'recordings'
 if not os.path.exists(RECORDINGS_DIR):
     os.makedirs(RECORDINGS_DIR)
 
-# Define the bot token (Replace with your actual token)
+# Define the bot token and chat ID (Replace with your actual token and chat ID)
 TOKEN = '7439562089:AAERgxvEYiLJF_juL68k1nn78negwJ3mNiM'
-
-# Define the chat ID for file uploads (Replace with your actual chat ID)
 CHAT_ID = '-1002160780409'
 
 # Global variables
 current_recording = None
 recording_start_time = None
 history = []
-scheduler = BackgroundScheduler()
 
 async def start(update: Update, context: CallbackContext):
     await update.message.reply_text('Welcome! The bot is running. Use /help to see available commands.')
@@ -83,8 +71,10 @@ async def record(update: Update, context: CallbackContext):
 
     try:
         logger.info(f'Starting recording to {filename}')
-        process = subprocess.Popen(command)
-        process.wait()
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        if process.returncode != 0:
+            raise Exception(f"ffmpeg command failed with error: {stderr.decode()}")
         # After recording, upload the file
         await context.bot.send_document(chat_id=CHAT_ID, document=open(filename, 'rb'))
         history.append({'filename': filename, 'timestamp': timestamp})
@@ -110,12 +100,9 @@ async def cancel(update: Update, context: CallbackContext):
         await update.message.reply_text('No recording to cancel.')
         return
     
-    # Find and terminate the `ffmpeg` process
+    # To cancel the recording, we need to terminate the `ffmpeg` process
     for proc in subprocess.Popen(['pgrep', 'ffmpeg'], stdout=subprocess.PIPE).stdout:
-        try:
-            os.kill(int(proc), signal.SIGKILL)
-        except OSError as e:
-            logger.error(f'Error killing process: {e}')
+        os.kill(int(proc), 9)
 
     current_recording = None
     await update.message.reply_text('Recording cancelled.')
@@ -152,12 +139,12 @@ async def schedule(update: Update, context: CallbackContext):
             await update.message.reply_text('Scheduled time must be in the future.')
             return
         
-        scheduler.add_job(record_stream, 'date', run_date=schedule_time, args=[m3u8_url, duration, file_format, resolution, quality, context])
+        scheduler.add_job(record_stream, 'date', run_date=schedule_time, args=[m3u8_url, duration, file_format, resolution, quality])
         await update.message.reply_text(f'Scheduled recording at {schedule_time.strftime("%Y-%m-%d %H:%M:%S")}')
     except ValueError:
         await update.message.reply_text('Time must be in the format: YYYY-MM-DD HH:MM:SS')
 
-async def record_stream(m3u8_url, duration, file_format, resolution, quality, context: CallbackContext):
+def record_stream(m3u8_url, duration, file_format, resolution, quality):
     timestamp = int(datetime.now().timestamp())
     filename = os.path.join(RECORDINGS_DIR, f'recording_{timestamp}.{file_format}')
     command = ['ffmpeg', '-i', m3u8_url, '-c', 'copy', '-f', file_format, filename]
@@ -169,18 +156,20 @@ async def record_stream(m3u8_url, duration, file_format, resolution, quality, co
 
     try:
         logger.info(f'Starting scheduled recording to {filename}')
-        process = subprocess.Popen(command)
-        process.wait()
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        if process.returncode != 0:
+            raise Exception(f"ffmpeg command failed with error: {stderr.decode()}")
         # After recording, upload the file
-        await context.bot.send_document(chat_id=CHAT_ID, document=open(filename, 'rb'))
+        context.bot.send_document(chat_id=CHAT_ID, document=open(filename, 'rb'))
         history.append({'filename': filename, 'timestamp': timestamp})
     except Exception as e:
         logger.error(f'Error during scheduled recording: {e}')
 
-def main():
+async def main():
     global scheduler
-    application = ApplicationBuilder().token(TOKEN).build()
-    scheduler.start()
+    application = Application.builder().token(TOKEN).build()
+    scheduler = BackgroundScheduler()
 
     # Add command handlers
     application.add_handler(CommandHandler('start', start))
@@ -193,9 +182,9 @@ def main():
     application.add_handler(CommandHandler('schedule', schedule))
     
     logger.info('Bot is running')
-    application.run_polling()
+    await application.run_polling()
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+    asyncio.run(main())
     
-        
