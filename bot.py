@@ -183,10 +183,15 @@ async def main():
     application.add_handler(CommandHandler('schedule', schedule))
     
     logger.info('Bot is running')
-    await application.run_polling()
+
+    # Start the Application
+    await application.start()
+    await application.updater.start_polling()
+
+    # Keep the bot running
+    await application.updater.idle()
 
 if __name__ == '__main__':
     import asyncio
-    # Directly run the main function without manual event loop management
     asyncio.run(main())
         
