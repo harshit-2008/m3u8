@@ -19,7 +19,7 @@ if not os.path.exists(RECORDINGS_DIR):
     os.makedirs(RECORDINGS_DIR)
 
 # Define the bot token (Replace with your actual token)
-TOKEN = 'YOUR_BOT_TOKEN_HERE'
+TOKEN = '7439562089:AAERgxvEYiLJF_juL68k1nn78negwJ3mNiM'
 
 # Global variables
 current_recording = None
