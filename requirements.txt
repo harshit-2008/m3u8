@@ -1,9 +1,10 @@
-python-telegram-bot==20.1
 tqdm==4.65.0
 requests==2.31.0
 pytz==2024.1
 loguru==0.7.0  # Optional for advanced logging
 aiohttp==3.8.4  # Optional for advanced HTTP features
 moviepy==1.0.3  # Optional for additional media processing
-apscheduler==3.9.1
 ffmpeg-python==0.2.0
+python-telegram-bot==20.2
+apscheduler==3.9.2.post1
+
