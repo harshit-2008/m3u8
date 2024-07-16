@@ -187,6 +187,6 @@ async def main():
 
 if __name__ == '__main__':
     import asyncio
-    # Use asyncio.run to manage the event loop
+    # Directly run the main function without manual event loop management
     asyncio.run(main())
         
