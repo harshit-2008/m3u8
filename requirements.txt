@@ -6,5 +6,5 @@ aiohttp==3.8.4  # Optional for advanced HTTP features
 moviepy==1.0.3  # Optional for additional media processing
 ffmpeg-python==0.2.0
 python-telegram-bot==20.2
-apscheduler==3.9.2.post1
+apscheduler==3.9.1.post1
 
