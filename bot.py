@@ -1,326 +1,189 @@
-import logging
-import asyncio
-import ffmpeg
+_':
+    main()
 import os
+import logging
+import subprocess
 from datetime import datetime
-from telegram import Update, InputFile
-from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.date import DateTrigger
-from telegram.helpers import escape_markdown
-
-# Bot Token and Admin ID
-TOKEN = '7439562089:AAERgxvEYiLJF_juL68k1nn78negwJ3mNiM'
-ADMIN_ID = 6066102279  # Replace with your Telegram user ID
+from apscheduler.schedulers.background import BackgroundScheduler
+from telegram import Update, ParseMode
+from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
+from telegram.ext import CommandHandler
 
 # Configure logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create directories for recordings
-if not os.path.exists('recordings'):
-    os.makedirs('recordings')
+# Define the path for recordings
+RECORDINGS_DIR = 'recordings'
+if not os.path.exists(RECORDINGS_DIR):
+    os.makedirs(RECORDINGS_DIR)
 
-# Initialize the scheduler
-scheduler = AsyncIOScheduler()
-scheduler.start()
+# Define the bot token (Replace with your actual token)
+TOKEN = 'YOUR_BOT_TOKEN_HERE'
 
-# Dictionary to keep track of ongoing recordings
-recordings = {}
-
-# Dictionary to keep track of scheduled recordings
-schedules = {}
-
-# Dictionary to keep track of completed recordings for history
+# Global variables
+current_recording = None
+recording_start_time = None
 history = []
 
-def admin_required(func):
-    """Decorator to check if the user is an admin."""
-    async def wrapper(update: Update, context: CallbackContext):
-        if update.message.from_user.id == ADMIN_ID:
-            return await func(update, context)
-        else:
-            await update.message.reply_text('Sorry, but you are not allowed to use this command.')
-    return wrapper
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text('Welcome! The bot is running. Use /help to see available commands.')
 
-async def start(update: Update, context: CallbackContext):
-    await update.message.reply_text('Welcome to the Live Recorder Bot! Use /record to start recording a live stream or /schedule to schedule a recording.')
+def help_command(update: Update, context: CallbackContext):
+    help_text = (
+        "/start - Start the bot\n"
+        "/help - Show this help message\n"
+        "/record <M3U8 link> [<duration>] [<format>] [<resolution>] [<quality>] - Start recording the M3U8 stream\n"
+        "/status - Show the current status of the bot\n"
+        "/cancel - Cancel the current operation\n"
+        "/timing - Show the start time of the recording\n"
+        "/history - Show the download history\n"
+        "/schedule <time> <M3U8 link> [<duration>] [<format>] [<resolution>] [<quality>] - Schedule a recording"
+    )
+    update.message.reply_text(help_text)
 
-@admin_required
-async def record(update: Update, context: CallbackContext):
-    if len(context.args) != 5:
-        await update.message.reply_text('Usage: /record <m3u8_url> <duration> <format> <resolution> <quality>')
-        return
+def record(update: Update, context: CallbackContext):
+    global current_recording, recording_start_time
     
-    m3u8_url, duration, format, resolution, quality = context.args
-
-    # Validate inputs
-    try:
-        duration = int(duration)
-    except ValueError:
-        await update.message.reply_text('Invalid duration. Please enter a valid number of seconds.')
+    if current_recording is not None:
+        update.message.reply_text('A recording is already in progress. Use /cancel to stop it.')
         return
 
-    valid_formats = ['mp4', 'mkv', 'avi']
-    if format not in valid_formats:
-        await update.message.reply_text(f'Invalid format. Supported formats are: {", ".join(valid_formats)}.')
+    if len(context.args) < 1:
+        update.message.reply_text('Usage: /record <M3U8 link> [<duration>] [<format>] [<resolution>] [<quality>]')
         return
 
-    valid_resolutions = ['640x360', '1280x720', '1920x1080']
-    if resolution not in valid_resolutions:
-        await update.message.reply_text(f'Invalid resolution. Supported resolutions are: {", ".join(valid_resolutions)}.')
-        return
+    m3u8_url = context.args[0]
+    duration = context.args[1] if len(context.args) > 1 else '00:00:00'
+    file_format = context.args[2] if len(context.args) > 2 else 'mkv'
+    resolution = context.args[3] if len(context.args) > 3 else ''
+    quality = context.args[4] if len(context.args) > 4 else ''
 
-    valid_qualities = ['low', 'medium', 'high']
-    if quality not in valid_qualities:
-        await update.message.reply_text(f'Invalid quality. Supported qualities are: {", ".join(valid_qualities)}.')
-        return
+    timestamp = int(datetime.now().timestamp())
+    filename = os.path.join(RECORDINGS_DIR, f'recording_{timestamp}.{file_format}')
+    command = ['ffmpeg', '-i', m3u8_url, '-c', 'copy', '-f', file_format, filename]
+    
+    if resolution:
+        command.insert(-2, f'-s {resolution}')
+    if quality:
+        command.insert(-2, f'-b:v {quality}')
 
-    resolution_dict = {
-        '640x360': '360',
-        '1280x720': '720',
-        '1920x1080': '1080'
-    }
-
-    quality_dict = {
-        'low': '1',
-        'medium': '2',
-        'high': '3'
-    }
-
-    # Build the ffmpeg command
-    output_file = f'recordings/recording_{update.message.message_id}.{format}'
-    ffmpeg_command = [
-        'ffmpeg',
-        '-i', m3u8_url,
-        '-t', str(duration),
-        '-vf', f'scale={resolution}',
-        '-c:v', 'libx264',
-        '-crf', quality_dict[quality],
-        '-preset', 'fast',
-        '-c:a', 'aac',
-        '-strict', 'experimental',
-        output_file
-    ]
-
-    # Add recording job to dictionary
-    recordings[update.message.message_id] = {
-        'm3u8_url': m3u8_url,
-        'duration': duration,
-        'format': format,
-        'resolution': resolution,
-        'quality': quality,
-        'start_time': datetime.now(),
-        'status': 'Started',
-        'file': output_file
-    }
+    current_recording = filename
+    recording_start_time = datetime.now()
 
     try:
-        # Start the recording process
-        await update.message.reply_text(f'Recording started for {duration} seconds. Format: {format.upper()}, Resolution: {resolution}, Quality: {quality.capitalize()}.')
-
-        process = await asyncio.create_subprocess_exec(*ffmpeg_command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        await process.communicate()
-
-        # Update recording job status
-        recordings[update.message.message_id]['status'] = 'Completed'
-
-        # Send the recorded video file
-        with open(output_file, 'rb') as video:
-            await update.message.reply_document(document=InputFile(video, filename=f'recording_{update.message.message_id}.{format}'))
-
-        # Add to history
-        history.append(recordings[update.message.message_id])
-
-        # Remove the local recording file
-        os.remove(output_file)
-        del recordings[update.message.message_id]
+        logger.info(f'Starting recording to {filename}')
+        process = subprocess.Popen(command)
+        process.wait()
+        # After recording, upload the file
+        chat_id = 'YOUR_CHAT_ID_HERE'
+        context.bot.send_document(chat_id=chat_id, document=open(filename, 'rb'))
+        history.append({'filename': filename, 'timestamp': timestamp})
+        update.message.reply_text(f'Recording finished and uploaded: {filename}')
     except Exception as e:
-        logger.error(f'An error occurred while recording: {e}')
-        await update.message.reply_text('An error occurred while trying to record the stream.')
-        recordings[update.message.message_id]['status'] = 'Failed'
+        logger.error(f'Error during recording: {e}')
+        update.message.reply_text(f'An error occurred: {e}')
+    finally:
+        current_recording = None
+        recording_start_time = None
 
-@admin_required
-async def schedule(update: Update, context: CallbackContext):
-    if len(context.args) != 6:
-        await update.message.reply_text('Usage: /schedule <m3u8_url> <start_time> <duration> <format> <resolution> <quality>')
-        return
-
-    m3u8_url, start_time_str, duration, format, resolution, quality = context.args
-
-    # Validate inputs
-    try:
-        duration = int(duration)
-        start_time = datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S')
-    except ValueError:
-        await update.message.reply_text('Invalid time format. Use YYYY-MM-DD HH:MM:SS for start_time.')
-        return
-
-    valid_formats = ['mp4', 'mkv', 'avi']
-    if format not in valid_formats:
-        await update.message.reply_text(f'Invalid format. Supported formats are: {", ".join(valid_formats)}.')
-        return
-
-    valid_resolutions = ['640x360', '1280x720', '1920x1080']
-    if resolution not in valid_resolutions:
-        await update.message.reply_text(f'Invalid resolution. Supported resolutions are: {", ".join(valid_resolutions)}.')
-        return
-
-    valid_qualities = ['low', 'medium', 'high']
-    if quality not in valid_qualities:
-        await update.message.reply_text(f'Invalid quality. Supported qualities are: {", ".join(valid_qualities)}.')
-        return
-
-    resolution_dict = {
-        '640x360': '360',
-        '1280x720': '720',
-        '1920x1080': '1080'
-    }
-
-    quality_dict = {
-        'low': '1',
-        'medium': '2',
-        'high': '3'
-    }
-
-    # Schedule the recording job
-    async def job():
-        output_file = f'recordings/scheduled_recording_{update.message.message_id}.{format}'
-        ffmpeg_command = [
-            'ffmpeg',
-            '-i', m3u8_url,
-            '-t', str(duration),
-            '-vf', f'scale={resolution}',
-            '-c:v', 'libx264',
-            '-crf', quality_dict[quality],
-            '-preset', 'fast',
-            '-c:a', 'aac',
-            '-strict', 'experimental',
-            output_file
-        ]
-        try:
-            await update.message.reply_text(f'Scheduled recording started for {duration} seconds. Format: {format.upper()}, Resolution: {resolution}, Quality: {quality.capitalize()}.')
-            process = await asyncio.create_subprocess_exec(*ffmpeg_command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            await process.communicate()
-            await update.message.reply_document(document=InputFile(output_file, filename=f'scheduled_recording_{update.message.message_id}.{format}'))
-            history.append({
-                'm3u8_url': m3u8_url,
-                'duration': duration,
-                'format': format,
-                'resolution': resolution,
-                'quality': quality,
-                'start_time': start_time,
-                'status': 'Completed',
-                'file': output_file
-            })
-            os.remove(output_file)
-        except Exception as e:
-            logger.error(f'An error occurred while recording: {e}')
-            await update.message.reply_text('An error occurred while trying to record the stream.')
-
-    job_id = f'scheduled_{update.message.message_id}'
-    scheduler.add_job(job, DateTrigger(run_date=start_time), id=job_id, name=f'Scheduled Recording {update.message.message_id}')
-    schedules[job_id] = {
-        'm3u8_url': m3u8_url,
-        'start_time': start_time,
-        'duration': duration,
-        'format': format,
-        'resolution': resolution,
-        'quality': quality,
-        'status': 'Scheduled'
-    }
-    await update.message.reply_text(f'Recording scheduled successfully. Job ID: {job_id}')
-
-@admin_required
-async def status(update: Update, context: CallbackContext):
-    if len(context.args) != 1:
-        await update.message.reply_text('Usage: /status <message_id>')
-        return
-
-    try:
-        message_id = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text('Invalid message ID. Please enter a valid number.')
-        return
-
-    if message_id in recordings:
-        record_info = recordings[message_id]
-        status_message = (
-            f"Recording Status:\n"
-            f"**M3U8 URL**: {escape_markdown(record_info['m3u8_url'])}\n"
-            f"**Duration**: {record_info['duration']} seconds\n"
-            f"**Format**: {record_info['format'].upper()}\n"
-            f"**Resolution**: {record_info['resolution']}\n"
-            f"**Quality**: {record_info['quality'].capitalize()}\n"
-            f"**Start Time**: {record_info['start_time'].strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"**Status**: {record_info['status']}"
-        )
-        await update.message.reply_text(status_message, parse_mode='MarkdownV2')
+def status(update: Update, context: CallbackContext):
+    if current_recording:
+        start_time = recording_start_time.strftime('%Y-%m-%d %H:%M:%S') if recording_start_time else 'N/A'
+        update.message.reply_text(f'Recording in progress: {current_recording}\nStarted at: {start_time}')
     else:
-        await update.message.reply_text('No ongoing recording with this message ID.')
+        update.message.reply_text('No recording is currently in progress.')
 
-@admin_required
-async def timing(update: Update, context: CallbackContext):
-    if len(context.args) != 1:
-        await update.message.reply_text('Usage: /timing <job_id>')
+def cancel(update: Update, context: CallbackContext):
+    global current_recording
+    
+    if current_recording is None:
+        update.message.reply_text('No recording to cancel.')
         return
+    
+    # To cancel the recording, we need to terminate the `ffmpeg` process
+    for proc in subprocess.Popen(['pgrep', 'ffmpeg'], stdout=subprocess.PIPE).stdout:
+        os.kill(int(proc), 9)
+
+    current_recording = None
+    update.message.reply_text('Recording cancelled.')
+
+def timing(update: Update, context: CallbackContext):
+    if recording_start_time:
+        update.message.reply_text(f'Recording started at {recording_start_time.strftime("%Y-%m-%d %H:%M:%S")}')
+    else:
+        update.message.reply_text('No recording in progress.')
+
+def history_command(update: Update, context: CallbackContext):
+    if not history:
+        update.message.reply_text('No recordings in history.')
+    else:
+        history_text = '\n'.join(f'{entry["filename"]} - {datetime.fromtimestamp(entry["timestamp"])}' for entry in history)
+        update.message.reply_text(f'Recording history:\n{history_text}')
+
+def schedule(update: Update, context: CallbackContext):
+    if len(context.args) < 2:
+        update.message.reply_text('Usage: /schedule <time> <M3U8 link> [<duration>] [<format>] [<resolution>] [<quality>]')
+        return
+
+    time_str = context.args[0]
+    m3u8_url = context.args[1]
+    duration = context.args[2] if len(context.args) > 2 else '00:00:00'
+    file_format = context.args[3] if len(context.args) > 3 else 'mkv'
+    resolution = context.args[4] if len(context.args) > 4 else ''
+    quality = context.args[5] if len(context.args) > 5 else ''
 
     try:
-        job_id = context.args[0]
-        job = scheduler.get_job(job_id)
-        if job:
-            schedule_info = schedules[job_id]
-            timing_message = (
-                f"Scheduled Recording Timing:\n"
-                f"**M3U8 URL**: {escape_markdown(schedule_info['m3u8_url'])}\n"
-                f"**Start Time**: {schedule_info['start_time'].strftime('%Y-%m-%d %H:%M:%S')}\n"
-                f"**Duration**: {schedule_info['duration']} seconds\n"
-                f"**Format**: {schedule_info['format'].upper()}\n"
-                f"**Resolution**: {schedule_info['resolution']}\n"
-                f"**Quality**: {schedule_info['quality'].capitalize()}\n"
-                f"**Status**: {schedule_info['status']}"
-            )
-            await update.message.reply_text(timing_message, parse_mode='MarkdownV2')
-        else:
-            await update.message.reply_text('No scheduled recording with this Job ID.')
-    except Exception as e:
-        logger.error(f'An error occurred while getting the timing: {e}')
-        await update.message.reply_text('An error occurred while trying to get the timing.')
+        schedule_time = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+        delta = (schedule_time - datetime.now()).total_seconds()
+        if delta <= 0:
+            update.message.reply_text('Scheduled time must be in the future.')
+            return
+        
+        scheduler.add_job(record_stream, 'date', run_date=schedule_time, args=[m3u8_url, duration, file_format, resolution, quality])
+        update.message.reply_text(f'Scheduled recording at {schedule_time.strftime("%Y-%m-%d %H:%M:%S")}')
+    except ValueError:
+        update.message.reply_text('Time must be in the format: YYYY-MM-DD HH:MM:SS')
 
-@admin_required
-async def history(update: Update, context: CallbackContext):
-    if not history:
-        await update.message.reply_text('No history available.')
-        return
-    
-    history_messages = []
-    for record in history:
-        history_messages.append(
-            f"**Recording ID**: {record['file']}\n"
-            f"**M3U8 URL**: {escape_markdown(record['m3u8_url'])}\n"
-            f"**Duration**: {record['duration']} seconds\n"
-            f"**Format**: {record['format'].upper()}\n"
-            f"**Resolution**: {record['resolution']}\n"
-            f"**Quality**: {record['quality'].capitalize()}\n"
-            f"**Start Time**: {record['start_time'].strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"**Status**: {record['status']}\n\n"
-        )
-    
-    history_text = '\n'.join(history_messages)
-    await update.message.reply_text(f"**Recording History:**\n\n{history_text}", parse_mode='MarkdownV2')
+def record_stream(m3u8_url, duration, file_format, resolution, quality):
+    timestamp = int(datetime.now().timestamp())
+    filename = os.path.join(RECORDINGS_DIR, f'recording_{timestamp}.{file_format}')
+    command = ['ffmpeg', '-i', m3u8_url, '-c', 'copy', '-f', file_format, filename]
+
+    if resolution:
+        command.insert(-2, f'-s {resolution}')
+    if quality:
+        command.insert(-2, f'-b:v {quality}')
+
+    try:
+        logger.info(f'Starting scheduled recording to {filename}')
+        process = subprocess.Popen(command)
+        process.wait()
+        # After recording, upload the file
+        chat_id = 'YOUR_CHAT_ID_HERE'
+        context.bot.send_document(chat_id=chat_id, document=open(filename, 'rb'))
+        history.append({'filename': filename, 'timestamp': timestamp})
+        logger.info(f'Recording finished and uploaded: {filename}')
+    except Exception as e:
+        logger.error(f'Error during recording: {e}')
 
 def main():
-    """Run the bot."""
+    global scheduler, context
+    
     application = Application.builder().token(TOKEN).build()
+    scheduler = BackgroundScheduler()
+    scheduler.start()
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("record", record))
-    application.add_handler(CommandHandler("schedule", schedule))
-    application.add_handler(CommandHandler("status", status))
-    application.add_handler(CommandHandler("timing", timing))
-    application.add_handler(CommandHandler("history", history))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, start))  # To handle any other text messages
-
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('help', help_command))
+    application.add_handler(CommandHandler('record', record))
+    application.add_handler(CommandHandler('status', status))
+    application.add_handler(CommandHandler('cancel', cancel))
+    application.add_handler(CommandHandler('timing', timing))
+    application.add_handler(CommandHandler('history', history_command))
+    application.add_handler(CommandHandler('schedule', schedule))
+    
+    logger.info('Bot is running')
     application.run_polling()
 
 if __name__ == '__main__':
