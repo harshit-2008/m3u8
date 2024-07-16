@@ -5,6 +5,7 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext
+import signal
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,10 +19,14 @@ if not os.path.exists(RECORDINGS_DIR):
 # Define the bot token (Replace with your actual token)
 TOKEN = '7439562089:AAERgxvEYiLJF_juL68k1nn78negwJ3mNiM'
 
+# Define the chat ID for file uploads (Replace with your actual chat ID)
+CHAT_ID = 'YOUR_CHAT_ID_HERE'
+
 # Global variables
 current_recording = None
 recording_start_time = None
 history = []
+scheduler = BackgroundScheduler()
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Welcome! The bot is running. Use /help to see available commands.')
@@ -59,7 +64,7 @@ def record(update: Update, context: CallbackContext):
     timestamp = int(datetime.now().timestamp())
     filename = os.path.join(RECORDINGS_DIR, f'recording_{timestamp}.{file_format}')
     command = ['ffmpeg', '-i', m3u8_url, '-c', 'copy', '-f', file_format, filename]
-    
+
     if resolution:
         command.insert(-2, f'-s {resolution}')
     if quality:
@@ -71,18 +76,10 @@ def record(update: Update, context: CallbackContext):
     try:
         logger.info(f'Starting recording to {filename}')
         process = subprocess.Popen(command)
-        process.wait()
-        # After recording, upload the file
-        chat_id = 'YOUR_CHAT_ID_HERE'
-        context.bot.send_document(chat_id=chat_id, document=open(filename, 'rb'))
-        history.append({'filename': filename, 'timestamp': timestamp})
-        update.message.reply_text(f'Recording finished and uploaded: {filename}')
+        update.message.reply_text(f'Recording started: {filename}')
     except Exception as e:
         logger.error(f'Error during recording: {e}')
         update.message.reply_text(f'An error occurred: {e}')
-    finally:
-        current_recording = None
-        recording_start_time = None
 
 def status(update: Update, context: CallbackContext):
     if current_recording:
@@ -98,9 +95,12 @@ def cancel(update: Update, context: CallbackContext):
         update.message.reply_text('No recording to cancel.')
         return
     
-    # To cancel the recording, we need to terminate the `ffmpeg` process
+    # Find and terminate the `ffmpeg` process
     for proc in subprocess.Popen(['pgrep', 'ffmpeg'], stdout=subprocess.PIPE).stdout:
-        os.kill(int(proc), 9)
+        try:
+            os.kill(int(proc), signal.SIGKILL)
+        except OSError as e:
+            logger.error(f'Error killing process: {e}')
 
     current_recording = None
     update.message.reply_text('Recording cancelled.')
@@ -137,12 +137,12 @@ def schedule(update: Update, context: CallbackContext):
             update.message.reply_text('Scheduled time must be in the future.')
             return
         
-        scheduler.add_job(record_stream, 'date', run_date=schedule_time, args=[m3u8_url, duration, file_format, resolution, quality])
+        scheduler.add_job(record_stream, 'date', run_date=schedule_time, args=[m3u8_url, duration, file_format, resolution, quality, context])
         update.message.reply_text(f'Scheduled recording at {schedule_time.strftime("%Y-%m-%d %H:%M:%S")}')
     except ValueError:
         update.message.reply_text('Time must be in the format: YYYY-MM-DD HH:MM:SS')
 
-def record_stream(m3u8_url, duration, file_format, resolution, quality):
+def record_stream(m3u8_url, duration, file_format, resolution, quality, context: CallbackContext):
     timestamp = int(datetime.now().timestamp())
     filename = os.path.join(RECORDINGS_DIR, f'recording_{timestamp}.{file_format}')
     command = ['ffmpeg', '-i', m3u8_url, '-c', 'copy', '-f', file_format, filename]
@@ -157,20 +157,16 @@ def record_stream(m3u8_url, duration, file_format, resolution, quality):
         process = subprocess.Popen(command)
         process.wait()
         # After recording, upload the file
-        chat_id = 'YOUR_CHAT_ID_HERE'
-        context.bot.send_document(chat_id=chat_id, document=open(filename, 'rb'))
+        context.bot.send_document(chat_id=CHAT_ID, document=open(filename, 'rb'))
         history.append({'filename': filename, 'timestamp': timestamp})
-        logger.info(f'Recording finished and uploaded: {filename}')
     except Exception as e:
-        logger.error(f'Error during recording: {e}')
+        logger.error(f'Error during scheduled recording: {e}')
 
 def main():
-    global scheduler, context
-    
+    global scheduler
     application = Application.builder().token(TOKEN).build()
-    scheduler = BackgroundScheduler()
-    scheduler.start()
 
+    # Add command handlers
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(CommandHandler('record', record))
@@ -180,9 +176,11 @@ def main():
     application.add_handler(CommandHandler('history', history_command))
     application.add_handler(CommandHandler('schedule', schedule))
     
+    # Start the scheduler
+    scheduler.start()
+    
     logger.info('Bot is running')
     application.run_polling()
 
 if __name__ == '__main__':
     main()
-        
