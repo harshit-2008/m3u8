@@ -185,6 +185,7 @@ async def main():
     logger.info('Bot is running')
 
     # Start the Application
+    await application.initialize()
     await application.start()
     await application.updater.start_polling()
 
@@ -194,3 +195,4 @@ async def main():
 if __name__ == '__main__':
     import asyncio
     asyncio.run(main())
+    
