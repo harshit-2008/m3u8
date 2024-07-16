@@ -3,9 +3,8 @@ import logging
 import subprocess
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
-from telegram import Update, ParseMode
-from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
-from telegram.ext import CommandHandler
+from telegram import Update
+from telegram.ext import Application, CommandHandler, CallbackContext
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -186,3 +185,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+        
