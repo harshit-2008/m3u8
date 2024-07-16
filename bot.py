@@ -1,10 +1,19 @@
+
+
+# Define the bot token (Replace with your actual token)
+TOKEN = ''
+
+# Define the chat ID for file uploads (Replace with your actual chat ID)
+CHAT_ID = ''
+
 import os
 import logging
 import subprocess
+import signal
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackContext, ApplicationBuilder
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackContext, CallbackQueryHandler
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -27,10 +36,10 @@ recording_start_time = None
 history = []
 scheduler = BackgroundScheduler()
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text('Welcome! The bot is running. Use /help to see available commands.')
+async def start(update: Update, context: CallbackContext):
+    await update.message.reply_text('Welcome! The bot is running. Use /help to see available commands.')
 
-def help_command(update: Update, context: CallbackContext):
+async def help_command(update: Update, context: CallbackContext):
     help_text = (
         "/start - Start the bot\n"
         "/help - Show this help message\n"
@@ -41,7 +50,7 @@ def help_command(update: Update, context: CallbackContext):
         "/history - Show the download history\n"
         "/schedule <time> <M3U8 link> [<duration>] [<format>] [<resolution>] [<quality>] - Schedule a recording"
     )
-    update.message.reply_text(help_text)
+    await update.message.reply_text(help_text)
 
 async def record(update: Update, context: CallbackContext):
     global current_recording, recording_start_time
@@ -189,3 +198,4 @@ def main():
 if __name__ == '__main__':
     main()
     
+        
