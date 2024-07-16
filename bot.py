@@ -23,6 +23,7 @@ CHAT_ID = '-1002160780409'
 current_recording = None
 recording_start_time = None
 history = []
+scheduler = BackgroundScheduler()
 
 async def start(update: Update, context: CallbackContext):
     await update.message.reply_text('Welcome! The bot is running. Use /help to see available commands.')
@@ -167,9 +168,9 @@ def record_stream(m3u8_url, duration, file_format, resolution, quality):
         logger.error(f'Error during scheduled recording: {e}')
 
 async def main():
-    global scheduler
+    # Build the Application
     application = Application.builder().token(TOKEN).build()
-    scheduler = BackgroundScheduler()
+    scheduler.start()
 
     # Add command handlers
     application.add_handler(CommandHandler('start', start))
