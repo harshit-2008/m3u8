@@ -1,5 +1,3 @@
-_':
-    main()
 import os
 import logging
 import subprocess
